@@ -141,16 +141,22 @@
           <i class="fa-solid fa-list-ul text-cyan-400 text-xs"></i>
           <span class="text-xs font-bold uppercase tracking-wider text-slate-200" id="playlistHeaderCount">Danh sách bài (2)</span>
         </div>
-        <div class="flex items-center gap-1.5">
-          <!-- Local Folder Auto-Scan Picker Button -->
-          <label class="px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-[11px] font-semibold text-cyan-300 transition flex items-center gap-1.5 cursor-pointer shadow-sm" title="Chọn thư mục nhạc nền để tự động nạp toàn bộ bài hát">
+        <div class="flex items-center gap-1.5 flex-wrap justify-end">
+          <!-- Nạp từ thư mục cục bộ (chọn folder trên máy, phát ngay không cần scan) -->
+          <label class="px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-[11px] font-semibold text-cyan-300 transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95" title="Chọn thư mục nhạc trên máy để nạp và phát ngay lập tức">
             <i class="fa-solid fa-folder-open text-[10px]"></i>
             <span>Nạp từ thư mục</span>
             <input type="file" id="localFolderInput" webkitdirectory directory multiple class="hidden" accept="audio/*">
           </label>
-          <button id="shuffleBtn" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700/80 text-[11px] font-medium text-slate-300 transition flex items-center gap-1">
+          <!-- Refresh BGM Playlist from default folder -->
+          <button id="refreshBgmBtn" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700/90 border border-slate-700 text-[11px] font-semibold text-cyan-300 transition flex items-center gap-1.5 active:scale-95 shadow-sm" title="Tải lại danh sách các bài hát trong thư mục bgm mặc định (sau khi chạy scan_bgm.py)">
+            <i class="fa-solid fa-arrows-rotate text-[10px]" id="refreshBgmIcon"></i>
+            <span>Cập nhật BGM</span>
+          </button>
+          <!-- Shuffle Button with crystal-clear ON/OFF state -->
+          <button id="shuffleBtn" class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5 active:scale-95" title="Bật/Tắt chế độ trộn bài">
             <i class="fa-solid fa-shuffle text-[10px]"></i>
-            <span>Trộn bài</span>
+            <span id="shuffleText">Trộn: Tắt</span>
           </button>
         </div>
       </div>
@@ -261,6 +267,9 @@
     const nextTrackBtn = document.getElementById('nextTrackBtn');
     const forceAdBtn = document.getElementById('forceAdBtn');
     const shuffleBtn = document.getElementById('shuffleBtn');
+    const shuffleText = document.getElementById('shuffleText');
+    const refreshBgmBtn = document.getElementById('refreshBgmBtn');
+    const refreshBgmIcon = document.getElementById('refreshBgmIcon');
     
     // Dedicated Volume Controls Elements
     const bgmMuteBtn = document.getElementById('bgmMuteBtn');
@@ -635,10 +644,70 @@
       }
     });
 
+    function updateShuffleUI() {
+      if (isShuffle) {
+        shuffleBtn.className = "px-2.5 py-1 rounded-lg bg-cyan-500 border border-cyan-400 text-[11px] font-bold text-white shadow-md shadow-cyan-500/30 transition flex items-center gap-1.5 active:scale-95";
+        shuffleText.textContent = "Trộn: BẬT";
+      } else {
+        shuffleBtn.className = "px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5 active:scale-95";
+        shuffleText.textContent = "Trộn: TẮT";
+      }
+    }
     shuffleBtn.addEventListener('click', () => {
       isShuffle = !isShuffle;
-      shuffleBtn.classList.toggle('text-cyan-400', isShuffle);
-      shuffleBtn.classList.toggle('bg-cyan-500/15', isShuffle);
+      updateShuffleUI();
+      localStorage.setItem('vnvc_shuffle', isShuffle ? '1' : '0');
+    });
+    // Restore shuffle state
+    const savedShuffle = localStorage.getItem('vnvc_shuffle');
+    if (savedShuffle === '1') { isShuffle = true; updateShuffleUI(); }
+
+    // Refresh BGM playlist from default bgm/ folder
+    refreshBgmBtn.addEventListener('click', async () => {
+      refreshBgmIcon.classList.add('fa-spin');
+      refreshBgmBtn.disabled = true;
+      try {
+        // Try manifest first, then fallback to playlist.js with cache bust
+        let newPlaylist = null;
+        try {
+          const res = await fetch('bgm/bgm_manifest.json?_=' + Date.now());
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) newPlaylist = data;
+          }
+        } catch(e) {}
+        if (!newPlaylist) {
+          // Fallback: reload playlist.js dynamically
+          const res2 = await fetch('playlist.js?_=' + Date.now());
+          if (res2.ok) {
+            const txt = await res2.text();
+            // Extract playlist array via eval in isolated scope
+            const m = txt.match(/playlist\s*:\s*(\[[\s\S]*?\])/);
+            if (m) {
+              try { newPlaylist = JSON.parse(m[1].replace(/'/g, '"')); } catch(e2) {
+                // Eval fallback for JS object literal
+                newPlaylist = Function('"use strict"; return (' + m[1] + ')')();
+              }
+            }
+          }
+        }
+        if (newPlaylist && newPlaylist.length > 0) {
+          playlist.length = 0;
+          newPlaylist.forEach((t, i) => playlist.push({ id: i+1, title: t.title, artist: t.artist || 'VNVC BGM', src: t.src }));
+          currentBgmIndex = 0;
+          renderPlaylist();
+          // Brief success flash
+          refreshBgmBtn.classList.add('border-emerald-500/60', 'text-emerald-300');
+          setTimeout(() => refreshBgmBtn.classList.remove('border-emerald-500/60', 'text-emerald-300'), 1200);
+        } else {
+          alert('Không tìm thấy bài mới trong thư mục bgm/. Hãy chạy cap_nhat_danh_sach.bat sau khi thêm file.');
+        }
+      } catch(err) {
+        alert('Lỗi cập nhật: ' + err.message);
+      } finally {
+        refreshBgmIcon.classList.remove('fa-spin');
+        refreshBgmBtn.disabled = false;
+      }
     });
 
     // --- DEDICATED INDEPENDENT VOLUME HANDLERS ---
@@ -742,37 +811,6 @@
       });
     }
 
-    const localFolderInput = document.getElementById('localFolderInput');
-
-    // Handle Local Folder Selection (Auto-Scan)
-    localFolderInput.addEventListener('change', (e) => {
-      const files = Array.from(e.target.files).filter(f => {
-        const ext = f.name.split('.').pop().toLowerCase();
-        return ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext);
-      });
-
-      if (files.length === 0) {
-        alert("Không tìm thấy file nhạc (mp3/wav) trong thư mục đã chọn!");
-        return;
-      }
-
-      // Clear & replace with new scanned files
-      playlist.length = 0;
-      files.forEach((file, index) => {
-        const cleanName = file.name.replace(/\.[^/.]+$/, "");
-        playlist.push({
-          id: index + 1,
-          title: cleanName,
-          artist: "Nhạc từ thư mục cục bộ",
-          src: URL.createObjectURL(file), // Direct stream from local file
-        });
-      });
-
-      currentBgmIndex = 0;
-      renderPlaylist();
-      alert(`Đã tự động nạp thành công ${files.length} bài hát vào danh sách phát!`);
-    });
-
     renderPlaylist();
     // Load saved volume settings or defaults
     const savedBgmVol = localStorage.getItem('vnvc_bgm_vol');
@@ -791,6 +829,38 @@
     }
     bgmAudio.volume = bgmVolume;
     adAudio.volume = adVolume;
+
+    // --- Nạp từ thư mục cục bộ: chọn folder trên máy, phát ngay không cần scan ---
+    const localFolderInput = document.getElementById('localFolderInput');
+    if (localFolderInput) {
+      localFolderInput.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files || []).filter(f => {
+          const ext = (f.name.split('.').pop() || '').toLowerCase();
+          return ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext);
+        });
+        if (files.length === 0) {
+          alert('Không tìm thấy file nhạc (mp3/wav/ogg/m4a) trong thư mục đã chọn!');
+          e.target.value = '';
+          return;
+        }
+        // Thay thế playlist hiện tại bằng file vừa chọn, phát ngay tại chỗ (object URL)
+        playlist.length = 0;
+        files.sort((a, b) => (a.webkitRelativePath || a.name).localeCompare(b.webkitRelativePath || b.name));
+        files.forEach((file, index) => {
+          const cleanName = file.name.replace(/\.[^/.]+$/, '');
+          playlist.push({
+            id: index + 1,
+            title: cleanName,
+            artist: 'Nhạc từ thư mục cục bộ',
+            src: URL.createObjectURL(file),
+          });
+        });
+        currentBgmIndex = 0;
+        renderPlaylist();
+        alert(`Đã nạp thành công ${files.length} bài từ thư mục vào phát ngay!`);
+        e.target.value = '';
+      });
+    }
   </script>
 </body>
 </html>

@@ -1,9 +1,9 @@
 import os
 import json
-import glob
 
 bgm_dir = os.path.join(os.path.dirname(__file__), 'bgm')
-output_file = os.path.join(os.path.dirname(__file__), 'playlist.js')
+output_js = os.path.join(os.path.dirname(__file__), 'playlist.js')
+output_json = os.path.join(bgm_dir, 'bgm_manifest.json')
 
 extensions = ('.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac')
 files = [f for f in sorted(os.listdir(bgm_dir)) if f.lower().endswith(extensions)]
@@ -18,8 +18,13 @@ for idx, f in enumerate(files, start=1):
         "src": f"bgm/{f}"
     })
 
+# Write JSON manifest
+with open(output_json, 'w', encoding='utf-8') as f:
+    json.dump(items, f, ensure_ascii=False, indent=2)
+
+# Write JS config
 content = f"""/**
- * TỰ ĐỘNG TẠO BỞI cap_nhat_danh_sach.bat
+ * TỰ ĐỘNG TẠO BỞI scan_bgm.py / cap_nhat_danh_sach.bat
  * Quét toàn bộ file trong thư mục bgm/
  */
 
@@ -36,7 +41,7 @@ window.AUDIO_CONFIG = {{
 }};
 """
 
-with open(output_file, 'w', encoding='utf-8') as f:
+with open(output_js, 'w', encoding='utf-8') as f:
     f.write(content)
 
-print(f"[THÀNH CÔNG] Đã quét và cập nhật {len(items)} bài hát vào playlist.js!")
+print(f"[THÀNH CÔNG] Đã quét và cập nhật {len(items)} bài hát vào playlist.js và bgm/bgm_manifest.json!")
