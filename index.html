@@ -662,52 +662,56 @@
     const savedShuffle = localStorage.getItem('vnvc_shuffle');
     if (savedShuffle === '1') { isShuffle = true; updateShuffleUI(); }
 
-    // Refresh BGM playlist from default bgm/ folder
-    refreshBgmBtn.addEventListener('click', async () => {
+    // Refresh BGM playlist (Hoạt động 100% trên cả file:// và http/https GitHub Pages)
+    refreshBgmBtn.addEventListener('click', () => {
       refreshBgmIcon.classList.add('fa-spin');
       refreshBgmBtn.disabled = true;
-      try {
-        // Try manifest first, then fallback to playlist.js with cache bust
-        let newPlaylist = null;
-        try {
-          const res = await fetch('bgm/bgm_manifest.json?_=' + Date.now());
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data) && data.length > 0) newPlaylist = data;
-          }
-        } catch(e) {}
-        if (!newPlaylist) {
-          // Fallback: reload playlist.js dynamically
-          const res2 = await fetch('playlist.js?_=' + Date.now());
-          if (res2.ok) {
-            const txt = await res2.text();
-            // Extract playlist array via eval in isolated scope
-            const m = txt.match(/playlist\s*:\s*(\[[\s\S]*?\])/);
-            if (m) {
-              try { newPlaylist = JSON.parse(m[1].replace(/'/g, '"')); } catch(e2) {
-                // Eval fallback for JS object literal
-                newPlaylist = Function('"use strict"; return (' + m[1] + ')')();
-              }
-            }
-          }
-        }
-        if (newPlaylist && newPlaylist.length > 0) {
-          playlist.length = 0;
-          newPlaylist.forEach((t, i) => playlist.push({ id: i+1, title: t.title, artist: t.artist || 'VNVC BGM', src: t.src }));
-          currentBgmIndex = 0;
-          renderPlaylist();
-          // Brief success flash
-          refreshBgmBtn.classList.add('border-emerald-500/60', 'text-emerald-300');
-          setTimeout(() => refreshBgmBtn.classList.remove('border-emerald-500/60', 'text-emerald-300'), 1200);
-        } else {
-          alert('Không tìm thấy bài mới trong thư mục bgm/. Hãy chạy cap_nhat_danh_sach.bat sau khi thêm file.');
-        }
-      } catch(err) {
-        alert('Lỗi cập nhật: ' + err.message);
-      } finally {
+
+      // Xóa thẻ script cũ nếu có
+      const oldScript = document.getElementById('dynamicPlaylistScript');
+      if (oldScript) oldScript.remove();
+
+      // Tạo thẻ script mới có gắn timestamp chống cache
+      const newScript = document.createElement('script');
+      newScript.id = 'dynamicPlaylistScript';
+      newScript.src = 'playlist.js?_=' + Date.now();
+
+      newScript.onload = () => {
         refreshBgmIcon.classList.remove('fa-spin');
         refreshBgmBtn.disabled = false;
-      }
+
+        if (window.AUDIO_CONFIG && Array.isArray(window.AUDIO_CONFIG.playlist) && window.AUDIO_CONFIG.playlist.length > 0) {
+          playlist.length = 0;
+          window.AUDIO_CONFIG.playlist.forEach((t, i) => {
+            playlist.push({
+              id: t.id || (i + 1),
+              title: t.title,
+              artist: t.artist || 'VNVC BGM',
+              src: t.src
+            });
+          });
+          currentBgmIndex = 0;
+          renderPlaylist();
+
+          // Đổi màu nút báo thành công
+          refreshBgmBtn.classList.add('bg-emerald-500/20', 'border-emerald-500/60', 'text-emerald-300');
+          setTimeout(() => {
+            refreshBgmBtn.classList.remove('bg-emerald-500/20', 'border-emerald-500/60', 'text-emerald-300');
+          }, 1500);
+
+          alert(`[THÀNH CÔNG] Đã cập nhật xong ${playlist.length} bài hát từ danh sách bgm!`);
+        } else {
+          alert('Không tìm thấy danh sách bài hát trong playlist.js!');
+        }
+      };
+
+      newScript.onerror = () => {
+        refreshBgmIcon.classList.remove('fa-spin');
+        refreshBgmBtn.disabled = false;
+        alert('Không thể tải file playlist.js! Hãy đảm bảo file playlist.js nằm cùng thư mục với index.html.');
+      };
+
+      document.head.appendChild(newScript);
     });
 
     // --- DEDICATED INDEPENDENT VOLUME HANDLERS ---
