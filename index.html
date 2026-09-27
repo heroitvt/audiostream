@@ -142,17 +142,6 @@
           <span class="text-xs font-bold uppercase tracking-wider text-slate-200" id="playlistHeaderCount">Danh sách bài (2)</span>
         </div>
         <div class="flex items-center gap-1.5 flex-wrap justify-end">
-          <!-- Nạp từ thư mục cục bộ (chọn folder trên máy, phát ngay không cần scan) -->
-          <label class="px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-[11px] font-semibold text-cyan-300 transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95" title="Chọn thư mục nhạc trên máy để nạp và phát ngay lập tức">
-            <i class="fa-solid fa-folder-open text-[10px]"></i>
-            <span>Nạp từ thư mục</span>
-            <input type="file" id="localFolderInput" webkitdirectory directory multiple class="hidden" accept="audio/*">
-          </label>
-          <!-- Refresh BGM Playlist from default folder -->
-          <button id="refreshBgmBtn" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700/90 border border-slate-700 text-[11px] font-semibold text-cyan-300 transition flex items-center gap-1.5 active:scale-95 shadow-sm" title="Tải lại danh sách các bài hát trong thư mục bgm mặc định (sau khi chạy scan_bgm.py)">
-            <i class="fa-solid fa-arrows-rotate text-[10px]" id="refreshBgmIcon"></i>
-            <span>Cập nhật BGM</span>
-          </button>
           <!-- Shuffle Button with crystal-clear ON/OFF state -->
           <button id="shuffleBtn" class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5 active:scale-95" title="Bật/Tắt chế độ trộn bài">
             <i class="fa-solid fa-shuffle text-[10px]"></i>
@@ -268,8 +257,6 @@
     const forceAdBtn = document.getElementById('forceAdBtn');
     const shuffleBtn = document.getElementById('shuffleBtn');
     const shuffleText = document.getElementById('shuffleText');
-    const refreshBgmBtn = document.getElementById('refreshBgmBtn');
-    const refreshBgmIcon = document.getElementById('refreshBgmIcon');
     
     // Dedicated Volume Controls Elements
     const bgmMuteBtn = document.getElementById('bgmMuteBtn');
@@ -662,58 +649,6 @@
     const savedShuffle = localStorage.getItem('vnvc_shuffle');
     if (savedShuffle === '1') { isShuffle = true; updateShuffleUI(); }
 
-    // Refresh BGM playlist (Hoạt động 100% trên cả file:// và http/https GitHub Pages)
-    refreshBgmBtn.addEventListener('click', () => {
-      refreshBgmIcon.classList.add('fa-spin');
-      refreshBgmBtn.disabled = true;
-
-      // Xóa thẻ script cũ nếu có
-      const oldScript = document.getElementById('dynamicPlaylistScript');
-      if (oldScript) oldScript.remove();
-
-      // Tạo thẻ script mới có gắn timestamp chống cache
-      const newScript = document.createElement('script');
-      newScript.id = 'dynamicPlaylistScript';
-      newScript.src = 'playlist.js?_=' + Date.now();
-
-      newScript.onload = () => {
-        refreshBgmIcon.classList.remove('fa-spin');
-        refreshBgmBtn.disabled = false;
-
-        if (window.AUDIO_CONFIG && Array.isArray(window.AUDIO_CONFIG.playlist) && window.AUDIO_CONFIG.playlist.length > 0) {
-          playlist.length = 0;
-          window.AUDIO_CONFIG.playlist.forEach((t, i) => {
-            playlist.push({
-              id: t.id || (i + 1),
-              title: t.title,
-              artist: t.artist || 'VNVC BGM',
-              src: t.src
-            });
-          });
-          currentBgmIndex = 0;
-          renderPlaylist();
-
-          // Đổi màu nút báo thành công
-          refreshBgmBtn.classList.add('bg-emerald-500/20', 'border-emerald-500/60', 'text-emerald-300');
-          setTimeout(() => {
-            refreshBgmBtn.classList.remove('bg-emerald-500/20', 'border-emerald-500/60', 'text-emerald-300');
-          }, 1500);
-
-          alert(`[THÀNH CÔNG] Đã cập nhật xong ${playlist.length} bài hát từ danh sách bgm!`);
-        } else {
-          alert('Không tìm thấy danh sách bài hát trong playlist.js!');
-        }
-      };
-
-      newScript.onerror = () => {
-        refreshBgmIcon.classList.remove('fa-spin');
-        refreshBgmBtn.disabled = false;
-        alert('Không thể tải file playlist.js! Hãy đảm bảo file playlist.js nằm cùng thư mục với index.html.');
-      };
-
-      document.head.appendChild(newScript);
-    });
-
     // --- DEDICATED INDEPENDENT VOLUME HANDLERS ---
     
     // 1. BGM Volume Slider
@@ -833,38 +768,6 @@
     }
     bgmAudio.volume = bgmVolume;
     adAudio.volume = adVolume;
-
-    // --- Nạp từ thư mục cục bộ: chọn folder trên máy, phát ngay không cần scan ---
-    const localFolderInput = document.getElementById('localFolderInput');
-    if (localFolderInput) {
-      localFolderInput.addEventListener('change', (e) => {
-        const files = Array.from(e.target.files || []).filter(f => {
-          const ext = (f.name.split('.').pop() || '').toLowerCase();
-          return ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext);
-        });
-        if (files.length === 0) {
-          alert('Không tìm thấy file nhạc (mp3/wav/ogg/m4a) trong thư mục đã chọn!');
-          e.target.value = '';
-          return;
-        }
-        // Thay thế playlist hiện tại bằng file vừa chọn, phát ngay tại chỗ (object URL)
-        playlist.length = 0;
-        files.sort((a, b) => (a.webkitRelativePath || a.name).localeCompare(b.webkitRelativePath || b.name));
-        files.forEach((file, index) => {
-          const cleanName = file.name.replace(/\.[^/.]+$/, '');
-          playlist.push({
-            id: index + 1,
-            title: cleanName,
-            artist: 'Nhạc từ thư mục cục bộ',
-            src: URL.createObjectURL(file),
-          });
-        });
-        currentBgmIndex = 0;
-        renderPlaylist();
-        alert(`Đã nạp thành công ${files.length} bài từ thư mục vào phát ngay!`);
-        e.target.value = '';
-      });
-    }
   </script>
 </body>
 </html>
