@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VNVC Audio Stream - Hệ Thống Phát Thanh Tự Động</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @keyframes pulse-ring {
+      0% { transform: scale(0.96); opacity: 0.8; }
+      50% { transform: scale(1.06); opacity: 0.35; }
+      100% { transform: scale(0.96); opacity: 0.8; }
+    }
+    .wave-bar {
+      transition: height 0.12s ease;
+    }
+    /* Custom scrollbar for playlist */
+    ::-webkit-scrollbar {
+      width: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #06b6d4;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen w-screen overflow-hidden flex flex-col justify-between p-3 sm:p-5 selection:bg-cyan-500 selection:text-black font-sans">
+  
+  <!-- Background Glow FX -->
+  <div class="fixed inset-0 overflow-hidden pointer-events-none z-0">
+    <div id="ambientGlow1" class="absolute -top-24 left-1/4 w-[36rem] h-[36rem] bg-cyan-500/10 rounded-full blur-[150px] transition-colors duration-1000"></div>
+    <div id="ambientGlow2" class="absolute -bottom-24 right-1/4 w-[36rem] h-[36rem] bg-blue-600/10 rounded-full blur-[150px] transition-colors duration-1000"></div>
+  </div>
+
+  <!-- TOP BAR: Brand, Live Tag & Global Cycle -->
+  <header class="relative z-10 w-full max-w-7xl mx-auto flex items-center justify-between pb-2.5 border-b border-slate-800/80 shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/30">
+        <i class="fa-solid fa-tower-broadcast text-sm text-white"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-bold tracking-tight text-white">VNVC AUDIO STREAM</span>
+          <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+            On Air
+          </span>
+        </div>
+        <p class="text-[11px] text-slate-400">Hệ thống phát thanh tự động trung tâm tiêm chủng VNVC</p>
+      </div>
+    </div>
+
+    <!-- Quick Cycle Switcher & Status -->
+    <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2 bg-slate-900/90 border border-slate-800 rounded-xl px-3 py-1.5 shadow-sm">
+        <i class="fa-solid fa-clock-rotate-left text-xs text-cyan-400"></i>
+        <span class="text-xs text-slate-300 font-medium">Chu kỳ:</span>
+        <select id="intervalSelect" class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-0.5 outline-none focus:border-cyan-500 cursor-pointer">
+          <option value="3600" selected>60 Phút</option>
+          <option value="1800">30 Phút</option>
+          <option value="600">10 Phút</option>
+          <option value="60">1 Phút (Test)</option>
+        </select>
+      </div>
+      <button id="forceAdBtn" class="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 shadow-sm" title="Chèn phát quảng cáo ngay">
+        <i class="fa-solid fa-bullhorn text-xs"></i>
+        <span class="hidden sm:inline">Chèn QC ngay</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN HORIZONTAL CONTENT (2 COLUMNS: LEFT STUDIO + RIGHT PLAYLIST) -->
+  <main class="relative z-10 w-full max-w-7xl mx-auto flex-1 grid grid-cols-12 gap-4 py-3 min-h-0">
+    
+    <!-- LEFT COLUMN (7 cols): Studio Player & Live Broadcaster Card -->
+    <section class="col-span-12 lg:col-span-7 bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col justify-between shadow-xl min-h-0">
+      
+      <!-- Live Status Banner -->
+      <div id="statusBanner" class="p-3 rounded-xl bg-gradient-to-r from-cyan-950/60 via-slate-900/90 to-blue-950/60 border border-cyan-800/40 flex items-center justify-between gap-3 shrink-0">
+        <div class="flex items-center gap-3 min-w-0">
+          <div id="statusIconBox" class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-cyan-500/10 text-cyan-400">
+            <i id="statusIcon" class="fa-solid fa-headphones text-xs"></i>
+          </div>
+          <div class="min-w-0">
+            <p id="modeLabel" class="text-[11px] uppercase font-bold tracking-wider text-cyan-400">Sẵn sàng phát</p>
+            <p id="modeDetail" class="text-xs font-medium text-slate-300 truncate">Nhấn nút Play ở dưới để bắt đầu luồng phát</p>
+          </div>
+        </div>
+        <!-- Countdown box -->
+        <div class="text-right shrink-0 bg-slate-950/60 px-3 py-1 rounded-lg border border-slate-800">
+          <p class="text-[9px] text-slate-400 uppercase font-semibold">QC tiếp theo</p>
+          <p id="adCountdownText" class="text-xs font-mono font-bold text-amber-400">--:--</p>
+        </div>
+      </div>
+
+      <!-- Disc Art & Track Info (Horizontal Flex) -->
+      <div class="flex items-center gap-5 my-auto py-2">
+        <!-- Animated Disc / Speaker Icon -->
+        <div class="relative shrink-0 w-24 h-24 sm:w-28 sm:h-28 flex items-center justify-center">
+          <div id="visualRing" class="absolute inset-0 rounded-full border-2 border-cyan-500/20"></div>
+          <div id="visualDisc" class="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-tr from-cyan-600 via-blue-600 to-indigo-600 p-0.5 shadow-lg shadow-cyan-500/20 flex items-center justify-center transition-transform duration-700">
+            <div class="w-full h-full rounded-full bg-slate-950 flex flex-col items-center justify-center">
+              <i id="centerIcon" class="fa-solid fa-tower-broadcast text-2xl text-cyan-400"></i>
+              <span id="centerSubtext" class="text-[8px] text-slate-400 font-semibold mt-1 tracking-wider">VNVC BGM</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Track Title & Meta -->
+        <div class="flex-1 min-w-0 space-y-1">
+          <div class="inline-block px-2 py-0.5 rounded bg-slate-800 text-[10px] font-mono text-cyan-400 uppercase font-semibold tracking-wider" id="trackTypeBadge">
+            Bản tin • Quảng cáo
+          </div>
+          <h2 id="trackTitle" class="text-base sm:text-lg font-bold text-slate-100 line-clamp-1" title="Chưa phát">
+            Chưa có bài phát
+          </h2>
+          <p id="trackArtist" class="text-xs text-slate-400 font-medium truncate flex items-center gap-1.5">
+            <i class="fa-solid fa-compact-disc text-cyan-400"></i>
+            <span>VNVC Audio Broadcast</span>
+          </p>
+        </div>
+      </div>
+
+      <!-- Waveform Visualizer Bar -->
+      <div id="visualizer" class="flex items-center justify-center gap-1.5 h-10 px-3 bg-slate-950/80 rounded-xl border border-slate-800/80 shrink-0">
+        <!-- 36 wave bars -->
+      </div>
+    </section>
+
+    <!-- RIGHT COLUMN (5 cols): Playlist Drawer / Table (Horizontal view, no vertical page growth) -->
+    <section class="col-span-12 lg:col-span-5 bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-2xl p-4 flex flex-col shadow-xl min-h-0">
+      <div class="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-800 shrink-0">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-list-ul text-cyan-400 text-xs"></i>
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-200" id="playlistHeaderCount">Danh sách bài (2)</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <!-- Local Folder Auto-Scan Picker Button -->
+          <label class="px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-[11px] font-semibold text-cyan-300 transition flex items-center gap-1.5 cursor-pointer shadow-sm" title="Chọn thư mục nhạc nền để tự động nạp toàn bộ bài hát">
+            <i class="fa-solid fa-folder-open text-[10px]"></i>
+            <span>Nạp từ thư mục</span>
+            <input type="file" id="localFolderInput" webkitdirectory directory multiple class="hidden" accept="audio/*">
+          </label>
+          <button id="shuffleBtn" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700/80 text-[11px] font-medium text-slate-300 transition flex items-center gap-1">
+            <i class="fa-solid fa-shuffle text-[10px]"></i>
+            <span>Trộn bài</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Ad Fixed Item in Playlist -->
+      <div class="p-2 mb-2 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs shrink-0">
+        <div class="flex items-center gap-2.5 truncate">
+          <span class="w-5 text-center text-amber-400 font-bold text-xs"><i class="fa-solid fa-bullhorn"></i></span>
+          <div class="truncate">
+            <p class="font-bold text-amber-300 truncate">QC: Phát loa vắc xin Tay Chân Miệng</p>
+            <p class="text-[10px] text-amber-400/80">Phát 2 lần mỗi chu kỳ 60 phút</p>
+          </div>
+        </div>
+        <span class="text-[10px] font-mono text-amber-300 font-semibold shrink-0 bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-500/20">2x Loop</span>
+      </div>
+
+      <!-- Scrollable Playlist Container (Takes up remaining height strictly inside this box) -->
+      <div id="playlistContainer" class="flex-1 overflow-y-auto space-y-1.5 pr-1 min-h-0">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+  </main>
+
+  <!-- BOTTOM BAR: Fixed Audio Controller with Seekbar & Controls -->
+  <footer class="relative z-10 w-full max-w-7xl mx-auto bg-slate-900/90 backdrop-blur-2xl border border-slate-800 rounded-2xl p-3 sm:px-6 shadow-2xl shrink-0">
+    <div class="flex flex-col sm:flex-row items-center gap-3 sm:gap-6">
+      
+      <!-- Progress Bar (Full Width) -->
+      <div class="w-full flex-1 order-2 sm:order-1 flex items-center gap-3">
+        <span id="currentTime" class="text-[11px] font-mono text-slate-400 w-10 text-right shrink-0">00:00</span>
+        <div id="progressContainer" class="relative flex-1 h-2 bg-slate-800 rounded-full cursor-pointer overflow-hidden group">
+          <div id="progressBar" class="absolute top-0 left-0 h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full w-0 transition-all duration-100"></div>
+        </div>
+        <span id="duration" class="text-[11px] font-mono text-slate-400 w-10 shrink-0">00:00</span>
+      </div>
+
+      <!-- Playback Buttons & Volume (Horizontal Dock) -->
+      <div class="flex items-center justify-between sm:justify-end gap-3 sm:gap-5 w-full sm:w-auto order-1 sm:order-2 shrink-0">
+        
+        <!-- Prev / Next Controls -->
+        <div class="flex items-center gap-2">
+          <button id="prevTrackBtn" class="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800/80 transition" title="Bài trước">
+            <i class="fa-solid fa-backward-step text-sm"></i>
+          </button>
+          
+          <!-- Master Play Button -->
+          <button id="mainPlayBtn" class="w-12 h-12 rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white flex items-center justify-center text-lg shadow-lg shadow-cyan-500/30 hover:scale-105 active:scale-95 transition-all">
+            <i id="mainPlayIcon" class="fa-solid fa-play ml-0.5"></i>
+          </button>
+
+          <button id="nextTrackBtn" class="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800/80 transition" title="Bài kế tiếp">
+            <i class="fa-solid fa-forward-step text-sm"></i>
+          </button>
+        </div>
+
+        <!-- Vertical Divider -->
+        <div class="h-6 w-px bg-slate-800 hidden sm:block"></div>
+
+        <!-- DUAL DEDICATED VOLUME CONTROLS (BGM & AD INDEPENDENT) -->
+        <div class="flex items-center gap-3 sm:gap-4 shrink-0">
+          <!-- BGM Volume Slider -->
+          <div class="flex items-center gap-1.5 bg-slate-950/60 px-2.5 py-1 rounded-xl border border-cyan-500/20 shadow-inner">
+            <button id="bgmMuteBtn" class="text-cyan-400 hover:text-cyan-300 transition" title="Tắt/Bật tiếng Nhạc Nền">
+              <i id="bgmVolumeIcon" class="fa-solid fa-music text-[11px]"></i>
+            </button>
+            <div class="flex flex-col gap-0.5">
+              <div class="flex items-center justify-between text-[9px] font-mono text-cyan-300">
+                <span>BGM</span>
+                <span id="bgmVolPct">75%</span>
+              </div>
+              <input type="range" id="bgmVolumeSlider" min="0" max="1" step="0.05" value="0.75" class="w-16 sm:w-20 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400">
+            </div>
+          </div>
+
+          <!-- AD Volume Slider -->
+          <div class="flex items-center gap-1.5 bg-slate-950/60 px-2.5 py-1 rounded-xl border border-amber-500/20 shadow-inner">
+            <button id="adMuteBtn" class="text-amber-400 hover:text-amber-300 transition" title="Tắt/Bật tiếng Quảng Cáo">
+              <i id="adVolumeIcon" class="fa-solid fa-bullhorn text-[11px]"></i>
+            </button>
+            <div class="flex flex-col gap-0.5">
+              <div class="flex items-center justify-between text-[9px] font-mono text-amber-300">
+                <span>QC</span>
+                <span id="adVolPct">100%</span>
+              </div>
+              <input type="range" id="adVolumeSlider" min="0" max="1" step="0.05" value="1.0" class="w-16 sm:w-20 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400">
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </footer>
+
+  <!-- 2 Dedicated Audio Elements -->
+  <audio id="adAudio" preload="auto"></audio>
+  <audio id="bgmAudio" preload="auto"></audio>
+
+  <!-- Load Playlist Config -->
+  <script src="playlist.js"></script>
+
+  <script>
+    const adAudio = document.getElementById('adAudio');
+    const bgmAudio = document.getElementById('bgmAudio');
+
+    const mainPlayBtn = document.getElementById('mainPlayBtn');
+    const mainPlayIcon = document.getElementById('mainPlayIcon');
+    const prevTrackBtn = document.getElementById('prevTrackBtn');
+    const nextTrackBtn = document.getElementById('nextTrackBtn');
+    const forceAdBtn = document.getElementById('forceAdBtn');
+    const shuffleBtn = document.getElementById('shuffleBtn');
+    
+    // Dedicated Volume Controls Elements
+    const bgmMuteBtn = document.getElementById('bgmMuteBtn');
+    const bgmVolumeIcon = document.getElementById('bgmVolumeIcon');
+    const bgmVolumeSlider = document.getElementById('bgmVolumeSlider');
+    const bgmVolPct = document.getElementById('bgmVolPct');
+
+    const adMuteBtn = document.getElementById('adMuteBtn');
+    const adVolumeIcon = document.getElementById('adVolumeIcon');
+    const adVolumeSlider = document.getElementById('adVolumeSlider');
+    const adVolPct = document.getElementById('adVolPct');
+
+    const intervalSelect = document.getElementById('intervalSelect');
+    const playlistContainer = document.getElementById('playlistContainer');
+    const playlistHeaderCount = document.getElementById('playlistHeaderCount');
+
+    const statusBanner = document.getElementById('statusBanner');
+    const statusIconBox = document.getElementById('statusIconBox');
+    const statusIcon = document.getElementById('statusIcon');
+    const modeLabel = document.getElementById('modeLabel');
+    const modeDetail = document.getElementById('modeDetail');
+    const adCountdownText = document.getElementById('adCountdownText');
+
+    const visualRing = document.getElementById('visualRing');
+    const visualDisc = document.getElementById('visualDisc');
+    const centerIcon = document.getElementById('centerIcon');
+    const centerSubtext = document.getElementById('centerSubtext');
+    const trackTypeBadge = document.getElementById('trackTypeBadge');
+    const trackTitle = document.getElementById('trackTitle');
+    const trackArtist = document.getElementById('trackArtist');
+    const visualizer = document.getElementById('visualizer');
+
+    const progressBar = document.getElementById('progressBar');
+    const progressContainer = document.getElementById('progressContainer');
+    const currentTimeEl = document.getElementById('currentTime');
+    const durationEl = document.getElementById('duration');
+
+    const glow1 = document.getElementById('ambientGlow1');
+    const glow2 = document.getElementById('ambientGlow2');
+
+    // --- State Variables ---
+    let currentMode = 'IDLE'; // 'IDLE' | 'AD' | 'BGM'
+    let isMasterPlaying = false;
+    let isShuffle = false;
+    // Independent dedicated volumes
+    let bgmVolume = 0.75;
+    let adVolume = 1.0;
+
+    let currentAdRound = 1;
+    const totalAdRounds = (window.AUDIO_CONFIG?.ad?.repeatCount) || 2;
+
+    let currentBgmIndex = 0;
+    const playlist = window.AUDIO_CONFIG?.playlist || [];
+    let bgmRemainingSeconds = (window.AUDIO_CONFIG?.bgmIntervalSeconds) || 3600;
+    let countdownTimer = null;
+    let isTransitioning = false;
+
+    if (window.AUDIO_CONFIG?.ad?.src) {
+      adAudio.src = window.AUDIO_CONFIG.ad.src;
+    }
+
+    // Generate 36 Visualizer Bars
+    const barCount = 36;
+    const bars = [];
+    for (let i = 0; i < barCount; i++) {
+      const bar = document.createElement('div');
+      bar.className = 'wave-bar w-1 bg-slate-700 rounded-full';
+      bar.style.height = '6px';
+      visualizer.appendChild(bar);
+      bars.push(bar);
+    }
+    let animInterval = null;
+
+    function formatTime(sec) {
+      if (isNaN(sec) || sec < 0) return "00:00";
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      return `${m < 10 ? '0' + m : m}:${s < 10 ? '0' + s : s}`;
+    }
+
+    // Render Right Playlist Table
+    function renderPlaylist() {
+      playlistHeaderCount.textContent = `Danh sách bài (${playlist.length})`;
+      playlistContainer.innerHTML = '';
+      playlist.forEach((track, idx) => {
+        const item = document.createElement('div');
+        const isActive = (currentMode === 'BGM' && currentBgmIndex === idx);
+        item.className = `flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer transition ${
+          isActive 
+            ? 'bg-cyan-500/20 border border-cyan-500/40 text-cyan-300' 
+            : 'hover:bg-slate-800/80 text-slate-300'
+        }`;
+        item.innerHTML = `
+          <div class="flex items-center gap-2.5 truncate">
+            <span class="w-5 text-center font-mono text-[11px] ${isActive ? 'text-cyan-400 font-bold' : 'text-slate-500'}">${idx + 1}</span>
+            <div class="truncate">
+              <p class="font-medium truncate ${isActive ? 'text-cyan-300 font-bold' : ''}">${track.title}</p>
+              <p class="text-[10px] text-slate-500 truncate">${track.artist || 'VNVC BGM'}</p>
+            </div>
+          </div>
+          ${isActive ? '<i class="fa-solid fa-volume-high text-xs text-cyan-400 shrink-0"></i>' : ''}
+        `;
+        item.addEventListener('click', () => {
+          if (currentMode === 'BGM') {
+            loadAndPlayBgm(idx);
+          } else {
+            currentBgmIndex = idx;
+            renderPlaylist();
+          }
+        });
+        playlistContainer.appendChild(item);
+      });
+    }
+
+    function fadeAudio(audioEl, fromVol, toVol, durationSec, onComplete) {
+      const steps = 25;
+      const stepTime = (durationSec * 1000) / steps;
+      const volDelta = (toVol - fromVol) / steps;
+      let currentStep = 0;
+      audioEl.volume = Math.max(0, Math.min(1, fromVol));
+
+      const timer = setInterval(() => {
+        currentStep++;
+        const nextVol = Math.max(0, Math.min(1, audioEl.volume + volDelta));
+        audioEl.volume = nextVol;
+        if (currentStep >= steps) {
+          clearInterval(timer);
+          audioEl.volume = Math.max(0, Math.min(1, toVol));
+          if (onComplete) onComplete();
+        }
+      }, stepTime);
+    }
+
+    // 1. Play Ad Sequence (Repeat 2 times)
+    function startAdSequence() {
+      currentMode = 'AD';
+      currentAdRound = 1;
+      updateUIForAd();
+      playAdRound(1);
+    }
+
+    function playAdRound(round) {
+      currentAdRound = round;
+      updateUIForAd();
+      adAudio.currentTime = 0;
+      adAudio.volume = adVolume;
+      adAudio.play().then(() => {
+        isMasterPlaying = true;
+        updatePlayBtnIcon();
+        startVisualizer('amber');
+      }).catch(err => console.error("Ad playback error:", err));
+    }
+
+    adAudio.addEventListener('ended', () => {
+      if (currentAdRound < totalAdRounds) {
+        playAdRound(currentAdRound + 1);
+      } else {
+        transitionToBgm();
+      }
+    });
+
+    // 2. Transition from Ad to BGM (Resume smoothly)
+    function transitionToBgm() {
+      currentMode = 'BGM';
+      isTransitioning = true;
+      
+      const intervalSec = parseInt(intervalSelect.value, 10) || 3600;
+      bgmRemainingSeconds = intervalSec;
+      startBgmCountdown();
+
+      if (!bgmAudio.src || bgmAudio.src === '') {
+        bgmAudio.src = playlist[currentBgmIndex]?.src || '';
+      }
+
+      updateUIForBgm();
+      renderPlaylist();
+      // Start BGM with gentle fade in from 0 up to bgmVolume
+      bgmAudio.volume = 0;
+      bgmAudio.play().then(() => {
+        isMasterPlaying = true;
+        updatePlayBtnIcon();
+        startVisualizer('cyan');
+        fadeAudio(bgmAudio, 0, bgmVolume, 2.0, () => {
+          isTransitioning = false;
+        });
+      }).catch(err => {
+        console.error("BGM playback error:", err);
+        isTransitioning = false;
+      });
+    }
+
+    // 3. Transition from BGM to Ad (Fade out, pause BGM in place)
+    function transitionToAd() {
+      if (currentMode === 'AD' || isTransitioning) return;
+      isTransitioning = true;
+      stopBgmCountdown();
+
+      fadeAudio(bgmAudio, bgmAudio.volume, 0, 2.5, () => {
+        bgmAudio.pause();
+        isTransitioning = false;
+        startAdSequence();
+      });
+    }
+
+    function startBgmCountdown() {
+      if (countdownTimer) clearInterval(countdownTimer);
+      countdownTimer = setInterval(() => {
+        if (currentMode === 'BGM' && isMasterPlaying) {
+          bgmRemainingSeconds--;
+          adCountdownText.textContent = formatTime(bgmRemainingSeconds);
+          if (bgmRemainingSeconds <= 0) {
+            transitionToAd();
+          }
+        }
+      }, 1000);
+    }
+
+    function stopBgmCountdown() {
+      if (countdownTimer) clearInterval(countdownTimer);
+      adCountdownText.textContent = "Đang phát QC";
+    }
+
+    bgmAudio.addEventListener('ended', () => {
+      if (isShuffle) {
+        currentBgmIndex = Math.floor(Math.random() * playlist.length);
+      } else {
+        currentBgmIndex = (currentBgmIndex + 1) % playlist.length;
+      }
+      loadAndPlayBgm(currentBgmIndex);
+    });
+
+    function loadAndPlayBgm(idx) {
+      currentBgmIndex = idx;
+      bgmAudio.src = playlist[currentBgmIndex].src;
+      bgmAudio.currentTime = 0;
+      bgmAudio.volume = bgmVolume;
+      bgmAudio.play().then(() => {
+        updateUIForBgm();
+        renderPlaylist();
+      }).catch(err => console.error("Error playing next BGM:", err));
+    }
+
+    // --- UI State Renderers ---
+    function updateUIForAd() {
+      modeLabel.textContent = `📢 QUẢNG CÁO PHÁT THANH (${currentAdRound}/${totalAdRounds})`;
+      modeLabel.className = "text-[11px] uppercase font-bold tracking-wider text-amber-400";
+      modeDetail.textContent = window.AUDIO_CONFIG?.ad?.title || "Bản tin VNVC";
+      statusIconBox.className = "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-amber-500/15 text-amber-400";
+      statusIcon.className = "fa-solid fa-bullhorn text-xs";
+      statusBanner.className = "p-3 rounded-xl bg-gradient-to-r from-amber-950/60 via-slate-900/90 to-orange-950/60 border border-amber-800/40 flex items-center justify-between gap-3 shrink-0";
+      
+      adCountdownText.textContent = `Lần ${currentAdRound}/${totalAdRounds}`;
+      trackTypeBadge.textContent = "Quảng cáo phát thanh";
+      trackTypeBadge.className = "inline-block px-2 py-0.5 rounded bg-amber-500/15 text-[10px] font-mono text-amber-400 uppercase font-semibold tracking-wider";
+
+      trackTitle.textContent = window.AUDIO_CONFIG?.ad?.title || "Phát loa VNVC";
+      trackArtist.innerHTML = `<i class="fa-solid fa-microphone-lines text-amber-400"></i> <span class="text-amber-300">${window.AUDIO_CONFIG?.ad?.artist || 'VNVC'}</span>`;
+      centerIcon.className = "fa-solid fa-bullhorn text-2xl text-amber-400";
+      centerSubtext.textContent = `AD ${currentAdRound}/${totalAdRounds}`;
+
+      visualRing.style.borderColor = "rgba(245, 158, 11, 0.4)";
+      glow1.className = "absolute -top-24 left-1/4 w-[36rem] h-[36rem] bg-amber-500/15 rounded-full blur-[150px] transition-colors duration-1000";
+      glow2.className = "absolute -bottom-24 right-1/4 w-[36rem] h-[36rem] bg-orange-600/15 rounded-full blur-[150px] transition-colors duration-1000";
+    }
+
+    function updateUIForBgm() {
+      const currentTrack = playlist[currentBgmIndex] || { title: "Nhạc nền", artist: "VNVC" };
+      modeLabel.textContent = `🎵 NHẠC NỀN KHÔNG LỜI (${currentBgmIndex + 1}/${playlist.length})`;
+      modeLabel.className = "text-[11px] uppercase font-bold tracking-wider text-cyan-400";
+      modeDetail.textContent = currentTrack.title;
+      statusIconBox.className = "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-cyan-500/15 text-cyan-400";
+      statusIcon.className = "fa-solid fa-music text-xs";
+      statusBanner.className = "p-3 rounded-xl bg-gradient-to-r from-cyan-950/60 via-slate-900/90 to-blue-950/60 border border-cyan-800/40 flex items-center justify-between gap-3 shrink-0";
+
+      adCountdownText.textContent = formatTime(bgmRemainingSeconds);
+      trackTypeBadge.textContent = `Nhạc nền #${currentBgmIndex + 1}`;
+      trackTypeBadge.className = "inline-block px-2 py-0.5 rounded bg-cyan-500/15 text-[10px] font-mono text-cyan-400 uppercase font-semibold tracking-wider";
+
+      trackTitle.textContent = currentTrack.title;
+      trackArtist.innerHTML = `<i class="fa-solid fa-compact-disc text-cyan-400"></i> <span class="text-cyan-300">${currentTrack.artist || 'VNVC BGM'}</span>`;
+      centerIcon.className = "fa-solid fa-headphones text-2xl text-cyan-400";
+      centerSubtext.textContent = `BGM #${currentBgmIndex + 1}`;
+
+      visualRing.style.borderColor = "rgba(6, 182, 212, 0.4)";
+      glow1.className = "absolute -top-24 left-1/4 w-[36rem] h-[36rem] bg-cyan-500/15 rounded-full blur-[150px] transition-colors duration-1000";
+      glow2.className = "absolute -bottom-24 right-1/4 w-[36rem] h-[36rem] bg-blue-600/15 rounded-full blur-[150px] transition-colors duration-1000";
+    }
+
+    function updatePlayBtnIcon() {
+      if (isMasterPlaying) {
+        mainPlayIcon.className = "fa-solid fa-pause";
+        visualRing.style.animation = "pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite";
+      } else {
+        mainPlayIcon.className = "fa-solid fa-play ml-0.5";
+        visualRing.style.animation = "none";
+        stopVisualizer();
+      }
+    }
+
+    mainPlayBtn.addEventListener('click', () => {
+      if (currentMode === 'IDLE') {
+        startAdSequence();
+      } else if (currentMode === 'AD') {
+        if (adAudio.paused) {
+          adAudio.play();
+          isMasterPlaying = true;
+          startVisualizer('amber');
+        } else {
+          adAudio.pause();
+          isMasterPlaying = false;
+          stopVisualizer();
+        }
+        updatePlayBtnIcon();
+      } else if (currentMode === 'BGM') {
+        if (bgmAudio.paused) {
+          bgmAudio.play();
+          isMasterPlaying = true;
+          startVisualizer('cyan');
+        } else {
+          bgmAudio.pause();
+          isMasterPlaying = false;
+          stopVisualizer();
+        }
+        updatePlayBtnIcon();
+      }
+    });
+
+    function updateProgress(audioEl) {
+      if (audioEl.duration) {
+        const pct = (audioEl.currentTime / audioEl.duration) * 100;
+        progressBar.style.width = `${pct}%`;
+        currentTimeEl.textContent = formatTime(audioEl.currentTime);
+        durationEl.textContent = formatTime(audioEl.duration);
+      }
+    }
+
+    adAudio.addEventListener('timeupdate', () => {
+      if (currentMode === 'AD') updateProgress(adAudio);
+    });
+    bgmAudio.addEventListener('timeupdate', () => {
+      if (currentMode === 'BGM') updateProgress(bgmAudio);
+    });
+
+    progressContainer.addEventListener('click', (e) => {
+      const activeAudio = (currentMode === 'AD') ? adAudio : bgmAudio;
+      if (activeAudio.duration) {
+        const width = progressContainer.clientWidth;
+        const clickX = e.offsetX;
+        activeAudio.currentTime = (clickX / width) * activeAudio.duration;
+      }
+    });
+
+    prevTrackBtn.addEventListener('click', () => {
+      if (currentMode === 'BGM') {
+        currentBgmIndex = (currentBgmIndex - 1 + playlist.length) % playlist.length;
+        loadAndPlayBgm(currentBgmIndex);
+      }
+    });
+
+    nextTrackBtn.addEventListener('click', () => {
+      if (currentMode === 'BGM') {
+        currentBgmIndex = (currentBgmIndex + 1) % playlist.length;
+        loadAndPlayBgm(currentBgmIndex);
+      }
+    });
+
+    forceAdBtn.addEventListener('click', () => {
+      if (currentMode === 'BGM') {
+        transitionToAd();
+      } else if (currentMode === 'IDLE') {
+        startAdSequence();
+      }
+    });
+
+    shuffleBtn.addEventListener('click', () => {
+      isShuffle = !isShuffle;
+      shuffleBtn.classList.toggle('text-cyan-400', isShuffle);
+      shuffleBtn.classList.toggle('bg-cyan-500/15', isShuffle);
+    });
+
+    // --- DEDICATED INDEPENDENT VOLUME HANDLERS ---
+    
+    // 1. BGM Volume Slider
+    bgmVolumeSlider.addEventListener('input', (e) => {
+      bgmVolume = parseFloat(e.target.value);
+      bgmVolPct.textContent = `${Math.round(bgmVolume * 100)}%`;
+      if (!isTransitioning) {
+        bgmAudio.volume = bgmVolume;
+      }
+      updateBgmVolumeIcon(bgmVolume);
+      localStorage.setItem('vnvc_bgm_vol', bgmVolume.toString());
+    });
+
+    bgmMuteBtn.addEventListener('click', () => {
+      if (bgmVolume > 0) {
+        bgmMuteBtn.dataset.prevVol = bgmVolume;
+        bgmVolume = 0;
+      } else {
+        bgmVolume = parseFloat(bgmMuteBtn.dataset.prevVol) || 0.75;
+      }
+      bgmVolumeSlider.value = bgmVolume;
+      bgmVolPct.textContent = `${Math.round(bgmVolume * 100)}%`;
+      if (!isTransitioning) bgmAudio.volume = bgmVolume;
+      updateBgmVolumeIcon(bgmVolume);
+      localStorage.setItem('vnvc_bgm_vol', bgmVolume.toString());
+    });
+
+    function updateBgmVolumeIcon(vol) {
+      if (vol <= 0) {
+        bgmVolumeIcon.className = "fa-solid fa-volume-xmark text-[11px] text-red-400";
+      } else if (vol < 0.5) {
+        bgmVolumeIcon.className = "fa-solid fa-volume-low text-[11px] text-cyan-300";
+      } else {
+        bgmVolumeIcon.className = "fa-solid fa-music text-[11px] text-cyan-400";
+      }
+    }
+
+    // 2. AD Volume Slider
+    adVolumeSlider.addEventListener('input', (e) => {
+      adVolume = parseFloat(e.target.value);
+      adVolPct.textContent = `${Math.round(adVolume * 100)}%`;
+      if (currentMode === 'AD') {
+        adAudio.volume = adVolume;
+      }
+      updateAdVolumeIcon(adVolume);
+      localStorage.setItem('vnvc_ad_vol', adVolume.toString());
+    });
+
+    adMuteBtn.addEventListener('click', () => {
+      if (adVolume > 0) {
+        adMuteBtn.dataset.prevVol = adVolume;
+        adVolume = 0;
+      } else {
+        adVolume = parseFloat(adMuteBtn.dataset.prevVol) || 1.0;
+      }
+      adVolumeSlider.value = adVolume;
+      adVolPct.textContent = `${Math.round(adVolume * 100)}%`;
+      if (currentMode === 'AD') adAudio.volume = adVolume;
+      updateAdVolumeIcon(adVolume);
+      localStorage.setItem('vnvc_ad_vol', adVolume.toString());
+    });
+
+    function updateAdVolumeIcon(vol) {
+      if (vol <= 0) {
+        adVolumeIcon.className = "fa-solid fa-volume-xmark text-[11px] text-red-400";
+      } else if (vol < 0.5) {
+        adVolumeIcon.className = "fa-solid fa-volume-low text-[11px] text-amber-300";
+      } else {
+        adVolumeIcon.className = "fa-solid fa-bullhorn text-[11px] text-amber-400";
+      }
+    }
+
+    intervalSelect.addEventListener('change', (e) => {
+      const newSec = parseInt(e.target.value, 10);
+      if (currentMode === 'BGM') {
+        bgmRemainingSeconds = newSec;
+        adCountdownText.textContent = formatTime(bgmRemainingSeconds);
+      }
+    });
+
+    function startVisualizer(color) {
+      if (animInterval) clearInterval(animInterval);
+      bars.forEach(b => {
+        b.className = `wave-bar w-1 rounded-full ${color === 'amber' ? 'bg-amber-400' : 'bg-cyan-400'}`;
+      });
+      animInterval = setInterval(() => {
+        bars.forEach((bar) => {
+          const h = Math.floor(Math.random() * 26) + 4;
+          bar.style.height = `${h}px`;
+        });
+      }, 100);
+    }
+
+    function stopVisualizer() {
+      if (animInterval) clearInterval(animInterval);
+      bars.forEach(bar => {
+        bar.style.height = '6px';
+        bar.className = 'wave-bar w-1 rounded-full bg-slate-700';
+      });
+    }
+
+    const localFolderInput = document.getElementById('localFolderInput');
+
+    // Handle Local Folder Selection (Auto-Scan)
+    localFolderInput.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files).filter(f => {
+        const ext = f.name.split('.').pop().toLowerCase();
+        return ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext);
+      });
+
+      if (files.length === 0) {
+        alert("Không tìm thấy file nhạc (mp3/wav) trong thư mục đã chọn!");
+        return;
+      }
+
+      // Clear & replace with new scanned files
+      playlist.length = 0;
+      files.forEach((file, index) => {
+        const cleanName = file.name.replace(/\.[^/.]+$/, "");
+        playlist.push({
+          id: index + 1,
+          title: cleanName,
+          artist: "Nhạc từ thư mục cục bộ",
+          src: URL.createObjectURL(file), // Direct stream from local file
+        });
+      });
+
+      currentBgmIndex = 0;
+      renderPlaylist();
+      alert(`Đã tự động nạp thành công ${files.length} bài hát vào danh sách phát!`);
+    });
+
+    renderPlaylist();
+    // Load saved volume settings or defaults
+    const savedBgmVol = localStorage.getItem('vnvc_bgm_vol');
+    if (savedBgmVol !== null) {
+      bgmVolume = parseFloat(savedBgmVol);
+      bgmVolumeSlider.value = bgmVolume;
+      bgmVolPct.textContent = `${Math.round(bgmVolume * 100)}%`;
+      updateBgmVolumeIcon(bgmVolume);
+    }
+    const savedAdVol = localStorage.getItem('vnvc_ad_vol');
+    if (savedAdVol !== null) {
+      adVolume = parseFloat(savedAdVol);
+      adVolumeSlider.value = adVolume;
+      adVolPct.textContent = `${Math.round(adVolume * 100)}%`;
+      updateAdVolumeIcon(adVolume);
+    }
+    bgmAudio.volume = bgmVolume;
+    adAudio.volume = adVolume;
+  </script>
+</body>
+</html>
