@@ -152,6 +152,11 @@
           <span class="text-xs font-bold uppercase tracking-wider text-slate-200" id="playlistHeaderCount">Danh sách bài (2)</span>
         </div>
         <div class="flex items-center gap-1.5 flex-wrap justify-end">
+          <!-- Auto Normalization (Cân bằng âm lượng tự động) Toggle Button -->
+          <button id="normBtn" class="px-2.5 py-1 rounded-lg bg-indigo-500/20 border border-indigo-500/50 text-[11px] font-semibold text-indigo-300 hover:text-indigo-100 transition flex items-center gap-1.5 active:scale-95 shadow-sm" title="Tự động cân bằng độ lớn âm lượng giữa các bài hát khác nhau (EBU R128 Dynamics)">
+            <i class="fa-solid fa-sliders text-[10px]"></i>
+            <span id="normText">Cân bằng: BẬT</span>
+          </button>
           <!-- Repeat One Track Button -->
           <button id="repeatOneBtn" class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5 active:scale-95" title="Bật/Tắt lặp lại 1 bài BGM đang phát">
             <i class="fa-solid fa-repeat text-[10px]"></i>
@@ -274,6 +279,8 @@
     const shuffleText = document.getElementById('shuffleText');
     const repeatOneBtn = document.getElementById('repeatOneBtn');
     const repeatOneText = document.getElementById('repeatOneText');
+    const normBtn = document.getElementById('normBtn');
+    const normText = document.getElementById('normText');
     
     // Dedicated Volume Controls Elements
     const bgmMuteBtn = document.getElementById('bgmMuteBtn');
@@ -319,6 +326,58 @@
     let isMasterPlaying = false;
     let isShuffle = false;
     let isRepeatOne = false;
+    let isNormalize = true; // Auto volume normalization across tracks
+
+    // Web Audio API Dynamics Compressor for Realtime Normalization
+    let audioCtx = null;
+    let bgmSourceNode = null;
+    let bgmCompressor = null;
+    let bgmMakeupGain = null;
+
+    function initWebAudioCompressor() {
+      if (audioCtx) return;
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        audioCtx = new AudioContextClass();
+
+        // Compressor settings configured for broadcast music leveling
+        bgmCompressor = audioCtx.createDynamicsCompressor();
+        bgmCompressor.threshold.setValueAtTime(-24, audioCtx.currentTime); // dB
+        bgmCompressor.knee.setValueAtTime(30, audioCtx.currentTime);        // soft knee
+        bgmCompressor.ratio.setValueAtTime(4.5, audioCtx.currentTime);      // 4.5:1 compression
+        bgmCompressor.attack.setValueAtTime(0.003, audioCtx.currentTime);   // 3ms attack
+        bgmCompressor.release.setValueAtTime(0.25, audioCtx.currentTime);   // 250ms release
+
+        // Makeup gain to restore pleasant listening loudness
+        bgmMakeupGain = audioCtx.createGain();
+        bgmMakeupGain.gain.setValueAtTime(1.35, audioCtx.currentTime);
+
+        // Connect graph
+        bgmSourceNode = audioCtx.createMediaElementSource(bgmAudio);
+        bgmSourceNode.connect(bgmCompressor);
+        bgmCompressor.connect(bgmMakeupGain);
+        bgmMakeupGain.connect(audioCtx.destination);
+      } catch (err) {
+        console.warn('Web Audio API not supported or already connected:', err);
+      }
+    }
+
+    function toggleAudioNormalization(enable) {
+      isNormalize = enable;
+      if (bgmCompressor && bgmMakeupGain && audioCtx) {
+        if (isNormalize) {
+          bgmCompressor.threshold.setValueAtTime(-24, audioCtx.currentTime);
+          bgmCompressor.ratio.setValueAtTime(4.5, audioCtx.currentTime);
+          bgmMakeupGain.gain.setValueAtTime(1.35, audioCtx.currentTime);
+        } else {
+          // Bypass mode
+          bgmCompressor.threshold.setValueAtTime(0, audioCtx.currentTime);
+          bgmCompressor.ratio.setValueAtTime(1, audioCtx.currentTime);
+          bgmMakeupGain.gain.setValueAtTime(1.0, audioCtx.currentTime);
+        }
+      }
+    }
     // Independent dedicated volumes
     let bgmVolume = 0.75;
     let adVolume = 1.0;
@@ -493,6 +552,10 @@
       updateUIForBgm();
       renderPlaylist();
       // Start BGM with gentle fade in from 0 up to bgmVolume
+      initWebAudioCompressor();
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
       bgmAudio.volume = 0;
       bgmAudio.play().then(() => {
         isMasterPlaying = true;
@@ -553,6 +616,10 @@
     });
 
     function loadAndPlayBgm(idx) {
+      initWebAudioCompressor();
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
       currentBgmIndex = idx;
       bgmAudio.src = playlist[currentBgmIndex].src;
       bgmAudio.currentTime = 0;
@@ -712,6 +779,31 @@
     // Restore repeat one state
     const savedRepeatOne = localStorage.getItem('vnvc_repeat_one');
     if (savedRepeatOne === '1') { isRepeatOne = true; updateRepeatOneUI(); }
+
+    // --- NORMALIZATION TOGGLE HANDLER ---
+    function updateNormUI() {
+      if (isNormalize) {
+        normBtn.className = "px-2.5 py-1 rounded-lg bg-indigo-600 border border-indigo-400 text-[11px] font-bold text-white shadow-md shadow-indigo-500/30 transition flex items-center gap-1.5 active:scale-95";
+        normText.textContent = "Cân bằng: BẬT";
+      } else {
+        normBtn.className = "px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5 active:scale-95";
+        normText.textContent = "Cân bằng: Tắt";
+      }
+    }
+    normBtn.addEventListener('click', () => {
+      initWebAudioCompressor();
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+      isNormalize = !isNormalize;
+      toggleAudioNormalization(isNormalize);
+      updateNormUI();
+      localStorage.setItem('vnvc_normalize', isNormalize ? '1' : '0');
+    });
+    // Restore norm state
+    const savedNorm = localStorage.getItem('vnvc_normalize');
+    if (savedNorm !== null) {
+      isNormalize = (savedNorm === '1');
+    }
+    updateNormUI();
 
     function updateShuffleUI() {
       if (isShuffle) {
