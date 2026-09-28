@@ -152,6 +152,11 @@
           <span class="text-xs font-bold uppercase tracking-wider text-slate-200" id="playlistHeaderCount">Danh sách bài (2)</span>
         </div>
         <div class="flex items-center gap-1.5 flex-wrap justify-end">
+          <!-- Repeat One Track Button -->
+          <button id="repeatOneBtn" class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5 active:scale-95" title="Bật/Tắt lặp lại 1 bài BGM đang phát">
+            <i class="fa-solid fa-repeat text-[10px]"></i>
+            <span id="repeatOneText">Lặp 1 bài: Tắt</span>
+          </button>
           <!-- Shuffle Button with crystal-clear ON/OFF state -->
           <button id="shuffleBtn" class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5 active:scale-95" title="Bật/Tắt chế độ trộn bài">
             <i class="fa-solid fa-shuffle text-[10px]"></i>
@@ -267,6 +272,8 @@
     const forceAdBtn = document.getElementById('forceAdBtn');
     const shuffleBtn = document.getElementById('shuffleBtn');
     const shuffleText = document.getElementById('shuffleText');
+    const repeatOneBtn = document.getElementById('repeatOneBtn');
+    const repeatOneText = document.getElementById('repeatOneText');
     
     // Dedicated Volume Controls Elements
     const bgmMuteBtn = document.getElementById('bgmMuteBtn');
@@ -311,6 +318,7 @@
     let currentMode = 'IDLE'; // 'IDLE' | 'AD' | 'BGM'
     let isMasterPlaying = false;
     let isShuffle = false;
+    let isRepeatOne = false;
     // Independent dedicated volumes
     let bgmVolume = 0.75;
     let adVolume = 1.0;
@@ -354,21 +362,62 @@
       playlist.forEach((track, idx) => {
         const item = document.createElement('div');
         const isActive = (currentMode === 'BGM' && currentBgmIndex === idx);
-        item.className = `flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer transition ${
+        item.className = `group flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer transition ${
           isActive 
             ? 'bg-cyan-500/20 border border-cyan-500/40 text-cyan-300' 
             : 'hover:bg-slate-800/80 text-slate-300'
         }`;
+        
+        const isThisTrackRepeat = (isRepeatOne && currentBgmIndex === idx);
+
         item.innerHTML = `
-          <div class="flex items-center gap-2.5 truncate">
+          <div class="flex items-center gap-2.5 truncate flex-1 min-w-0">
             <span class="w-5 text-center font-mono text-[11px] ${isActive ? 'text-cyan-400 font-bold' : 'text-slate-500'}">${idx + 1}</span>
             <div class="truncate">
               <p class="font-medium truncate ${isActive ? 'text-cyan-300 font-bold' : ''}">${track.title}</p>
               <p class="text-[10px] text-slate-500 truncate">${track.artist || 'VNVC BGM'}</p>
             </div>
           </div>
-          ${isActive ? '<i class="fa-solid fa-volume-high text-xs text-cyan-400 shrink-0"></i>' : ''}
+          <div class="flex items-center gap-1.5 shrink-0 ml-2">
+            <!-- Nút bật/tắt lặp riêng cho bài này -->
+            <button 
+              class="repeat-track-btn w-6 h-6 rounded-md flex items-center justify-center transition ${
+                isThisTrackRepeat 
+                  ? 'bg-emerald-500 text-white shadow-sm' 
+                  : 'text-slate-500 hover:text-slate-200 hover:bg-slate-700/60 opacity-40 group-hover:opacity-100'
+              }" 
+              title="${isThisTrackRepeat ? 'Đang lặp lại bài này (Bấm để tắt)' : 'Chọn lặp lại duy nhất bài này'}"
+            >
+              <i class="fa-solid fa-repeat text-[10px]"></i>
+            </button>
+            ${isActive ? '<i class="fa-solid fa-volume-high text-xs text-cyan-400 w-4 text-center"></i>' : '<span class="w-4"></span>'}
+          </div>
         `;
+
+        // Click vào nút lặp riêng
+        const repeatBtn = item.querySelector('.repeat-track-btn');
+        repeatBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (isRepeatOne && currentBgmIndex === idx) {
+            // Đang lặp chính bài này -> tắt lặp
+            isRepeatOne = false;
+          } else {
+            // Bật lặp bài này, nếu bài này chưa phát thì chuyển sang phát luôn bài này
+            isRepeatOne = true;
+            if (currentBgmIndex !== idx) {
+              if (currentMode === 'BGM') {
+                loadAndPlayBgm(idx);
+              } else {
+                currentBgmIndex = idx;
+              }
+            }
+          }
+          updateRepeatOneUI();
+          localStorage.setItem('vnvc_repeat_one', isRepeatOne ? '1' : '0');
+          renderPlaylist();
+        });
+
+        // Click vào dòng bài hát để phát
         item.addEventListener('click', () => {
           if (currentMode === 'BGM') {
             loadAndPlayBgm(idx);
@@ -490,6 +539,11 @@
     }
 
     bgmAudio.addEventListener('ended', () => {
+      if (isRepeatOne) {
+        // Lặp lại đúng bài hiện tại
+        loadAndPlayBgm(currentBgmIndex);
+        return;
+      }
       if (isShuffle) {
         currentBgmIndex = Math.floor(Math.random() * playlist.length);
       } else {
@@ -640,6 +694,24 @@
         startAdSequence();
       }
     });
+
+    function updateRepeatOneUI() {
+      if (isRepeatOne) {
+        repeatOneBtn.className = "px-2.5 py-1 rounded-lg bg-emerald-500 border border-emerald-400 text-[11px] font-bold text-white shadow-md shadow-emerald-500/30 transition flex items-center gap-1.5 active:scale-95";
+        repeatOneText.textContent = "Lặp 1 bài: BẬT";
+      } else {
+        repeatOneBtn.className = "px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5 active:scale-95";
+        repeatOneText.textContent = "Lặp 1 bài: Tắt";
+      }
+    }
+    repeatOneBtn.addEventListener('click', () => {
+      isRepeatOne = !isRepeatOne;
+      updateRepeatOneUI();
+      localStorage.setItem('vnvc_repeat_one', isRepeatOne ? '1' : '0');
+    });
+    // Restore repeat one state
+    const savedRepeatOne = localStorage.getItem('vnvc_repeat_one');
+    if (savedRepeatOne === '1') { isRepeatOne = true; updateRepeatOneUI(); }
 
     function updateShuffleUI() {
       if (isShuffle) {
