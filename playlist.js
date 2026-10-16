@@ -10,6 +10,12 @@ window.AUDIO_CONFIG = {
         "title": "27.4 Phát loa Ra mắt vắc xin phòng bệnh Tay Chân Miệng (Giọng miền Nam)",
         "artist": "VNVC Quảng cáo",
         "src": "ads/27.4 Phát loa Ra mắt vắc xin phòng bệnh Tay Chân Miệng (Giọng miền Nam).mp3"
+    },
+    {
+        "id": 2,
+        "title": "28. Phát loa vắc xin phòng Não mô cầu (Giọng miền Nam)",
+        "artist": "VNVC Quảng cáo",
+        "src": "ads/28. Phát loa vắc xin phòng Não mô cầu (Giọng miền Nam).mp3"
     }
 ],
   adRepeatCount: 2,
