@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>VNVC Audio Stream</title>
+  <!-- Anti-cache Headers -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <!-- PWA Settings -->
   <meta name="theme-color" content="#020617">
   <meta name="mobile-web-app-capable" content="yes">
@@ -304,8 +308,10 @@
   <audio id="adAudio" preload="auto"></audio>
   <audio id="bgmAudio" preload="auto"></audio>
 
-  <!-- Load Playlist Config -->
-  <script src="playlist.js"></script>
+  <!-- Load Playlist Config (Always Fresh / Anti-Cache) -->
+  <script>
+    document.write('<script src="playlist.js?v=' + Date.now() + '"><\/script>');
+  </script>
 
   <script>
     const adAudio = document.getElementById('adAudio');
