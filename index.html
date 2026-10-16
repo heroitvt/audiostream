@@ -382,8 +382,18 @@
     let bgmVolume = 0.75;
     let adVolume = 1.0;
 
+    // Ad Multi-file & Rotation Support
+    const adsList = (window.AUDIO_CONFIG?.ads && window.AUDIO_CONFIG.ads.length > 0)
+      ? window.AUDIO_CONFIG.ads
+      : (window.AUDIO_CONFIG?.ad ? [window.AUDIO_CONFIG.ad] : []);
+
+    let currentAdIndex = parseInt(localStorage.getItem('vnvc_current_ad_idx') || '0', 10);
+    if (isNaN(currentAdIndex) || currentAdIndex >= adsList.length || currentAdIndex < 0) {
+      currentAdIndex = 0;
+    }
+
     let currentAdRound = 1;
-    const totalAdRounds = (window.AUDIO_CONFIG?.ad?.repeatCount) || 2;
+    const totalAdRounds = (window.AUDIO_CONFIG?.adRepeatCount) || 1;
 
     let currentBgmIndex = 0;
     const playlist = window.AUDIO_CONFIG?.playlist || [];
@@ -391,8 +401,8 @@
     let countdownTimer = null;
     let isTransitioning = false;
 
-    if (window.AUDIO_CONFIG?.ad?.src) {
-      adAudio.src = window.AUDIO_CONFIG.ad.src;
+    if (adsList.length > 0 && adsList[currentAdIndex]?.src) {
+      adAudio.src = adsList[currentAdIndex].src;
     }
 
     // Generate 36 Visualizer Bars
@@ -508,10 +518,16 @@
       }, stepTime);
     }
 
-    // 1. Play Ad Sequence (Repeat 2 times)
+    // 1. Play Ad Sequence (Plays 1 ad file, then increments for next cycle)
     function startAdSequence() {
+      if (adsList.length === 0) {
+        transitionToBgm();
+        return;
+      }
       currentMode = 'AD';
       currentAdRound = 1;
+      const currentAd = adsList[currentAdIndex] || { title: "Bản tin VNVC", artist: "VNVC", src: "audio.mp3" };
+      adAudio.src = currentAd.src;
       updateUIForAd();
       playAdRound(1);
     }
@@ -532,6 +548,11 @@
       if (currentAdRound < totalAdRounds) {
         playAdRound(currentAdRound + 1);
       } else {
+        // Hoàn tất 1 file quảng cáo, luân chuyển sang file tiếp theo cho chu kỳ 60 phút sau
+        if (adsList.length > 1) {
+          currentAdIndex = (currentAdIndex + 1) % adsList.length;
+          localStorage.setItem('vnvc_current_ad_idx', currentAdIndex.toString());
+        }
         transitionToBgm();
       }
     });
@@ -632,21 +653,24 @@
 
     // --- UI State Renderers ---
     function updateUIForAd() {
-      modeLabel.textContent = `📢 QUẢNG CÁO PHÁT THANH (${currentAdRound}/${totalAdRounds})`;
+      const currentAd = adsList[currentAdIndex] || { title: "Bản tin VNVC", artist: "VNVC", src: "audio.mp3" };
+      const adProgressText = adsList.length > 1 ? ` (${currentAdIndex + 1}/${adsList.length})` : '';
+      const roundText = totalAdRounds > 1 ? ` • LẦN ${currentAdRound}/${totalAdRounds}` : '';
+      modeLabel.textContent = `📢 QUẢNG CÁO PHÁT THANH${adProgressText}${roundText}`;
       modeLabel.className = "text-[11px] uppercase font-bold tracking-wider text-amber-400";
-      modeDetail.textContent = window.AUDIO_CONFIG?.ad?.title || "Bản tin VNVC";
+      modeDetail.textContent = currentAd.title || "Bản tin VNVC";
       statusIconBox.className = "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-amber-500/15 text-amber-400";
       statusIcon.className = "fa-solid fa-bullhorn text-xs";
       statusBanner.className = "p-3 rounded-xl bg-gradient-to-r from-amber-950/60 via-slate-900/90 to-orange-950/60 border border-amber-800/40 flex items-center justify-between gap-3 shrink-0";
       
-      adCountdownText.textContent = `Lần ${currentAdRound}/${totalAdRounds}`;
-      trackTypeBadge.textContent = "Quảng cáo phát thanh";
+      adCountdownText.textContent = totalAdRounds > 1 ? `Lần ${currentAdRound}/${totalAdRounds}` : `QC ${currentAdIndex + 1}/${adsList.length}`;
+      trackTypeBadge.textContent = totalAdRounds > 1 ? `Quảng cáo #${currentAdIndex + 1} • Lần ${currentAdRound}/${totalAdRounds}` : `Quảng cáo #${currentAdIndex + 1}`;
       trackTypeBadge.className = "inline-block px-2 py-0.5 rounded bg-amber-500/15 text-[10px] font-mono text-amber-400 uppercase font-semibold tracking-wider";
 
-      trackTitle.textContent = window.AUDIO_CONFIG?.ad?.title || "Phát loa VNVC";
-      trackArtist.innerHTML = `<i class="fa-solid fa-microphone-lines text-amber-400"></i> <span class="text-amber-300">${window.AUDIO_CONFIG?.ad?.artist || 'VNVC'}</span>`;
+      trackTitle.textContent = currentAd.title || "Phát loa VNVC";
+      trackArtist.innerHTML = `<i class="fa-solid fa-microphone-lines text-amber-400"></i> <span class="text-amber-300">${currentAd.artist || 'VNVC Quảng cáo'}</span>`;
       centerIcon.className = "fa-solid fa-bullhorn text-2xl text-amber-400";
-      centerSubtext.textContent = `AD ${currentAdRound}/${totalAdRounds}`;
+      centerSubtext.textContent = totalAdRounds > 1 ? `AD ${currentAdRound}/${totalAdRounds}` : `AD ${currentAdIndex + 1}/${adsList.length}`;
 
       visualRing.style.borderColor = "rgba(245, 158, 11, 0.4)";
       glow1.className = "absolute -top-24 left-1/4 w-[36rem] h-[36rem] bg-amber-500/15 rounded-full blur-[150px] transition-colors duration-1000";

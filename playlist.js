@@ -1,15 +1,18 @@
 /**
  * TỰ ĐỘNG TẠO BỞI scan_bgm.py / cap_nhat_danh_sach.bat
- * Quét toàn bộ file trong thư mục bgm/
+ * Quét toàn bộ file trong thư mục bgm/ và ads/
  */
 
 window.AUDIO_CONFIG = {
-  ad: {
-    title: "Phát loa Ra mắt vắc xin phòng bệnh Tay Chân Miệng",
-    artist: "VNVC • Giọng miền Nam",
-    src: "audio.mp3",
-    repeatCount: 2,
-  },
+  ads: [
+    {
+        "id": 1,
+        "title": "27.4 Phát loa Ra mắt vắc xin phòng bệnh Tay Chân Miệng (Giọng miền Nam)",
+        "artist": "VNVC Quảng cáo",
+        "src": "ads/27.4 Phát loa Ra mắt vắc xin phòng bệnh Tay Chân Miệng (Giọng miền Nam).mp3"
+    }
+],
+  adRepeatCount: 2,
   bgmIntervalSeconds: 3600,
   fadeDurationSeconds: 2.5,
   playlist: [
