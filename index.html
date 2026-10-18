@@ -393,6 +393,8 @@
     let bgmSourceNode = null;
     let bgmCompressor = null;
     let bgmMakeupGain = null;
+    let adSourceNode = null;
+    let adGainNode = null;
 
     function initWebAudioCompressor() {
       if (audioCtx) return;
@@ -401,7 +403,7 @@
         if (!AudioContextClass) return;
         audioCtx = new AudioContextClass();
 
-        // Compressor settings configured for broadcast music leveling
+        // 1. Compressor settings configured for broadcast music leveling (BGM)
         bgmCompressor = audioCtx.createDynamicsCompressor();
         bgmCompressor.threshold.setValueAtTime(-24, audioCtx.currentTime); // dB
         bgmCompressor.knee.setValueAtTime(30, audioCtx.currentTime);        // soft knee
@@ -413,11 +415,18 @@
         bgmMakeupGain = audioCtx.createGain();
         bgmMakeupGain.gain.setValueAtTime(1.35, audioCtx.currentTime);
 
-        // Connect graph
+        // Connect BGM graph
         bgmSourceNode = audioCtx.createMediaElementSource(bgmAudio);
         bgmSourceNode.connect(bgmCompressor);
         bgmCompressor.connect(bgmMakeupGain);
         bgmMakeupGain.connect(audioCtx.destination);
+
+        // 2. Broadcast Voice Booster for Ads (Khuếch đại âm lượng phát loa thông báo)
+        adGainNode = audioCtx.createGain();
+        adGainNode.gain.setValueAtTime(1.8, audioCtx.currentTime); // Boost giọng đọc phát thanh rõ ràng
+        adSourceNode = audioCtx.createMediaElementSource(adAudio);
+        adSourceNode.connect(adGainNode);
+        adGainNode.connect(audioCtx.destination);
       } catch (err) {
         console.warn('Web Audio API not supported or already connected:', err);
       }
@@ -734,6 +743,10 @@
     function playAdRound(round) {
       currentAdRound = round;
       updateUIForAd();
+      initWebAudioCompressor();
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
       adAudio.currentTime = 0;
       adAudio.volume = adVolume;
       adAudio.play().then(() => {
@@ -1096,6 +1109,9 @@
       if (currentMode === 'AD') {
         adAudio.volume = adVolume;
       }
+      if (adGainNode && audioCtx) {
+        adGainNode.gain.setValueAtTime(1.8 * adVolume, audioCtx.currentTime);
+      }
       updateAdVolumeIcon(adVolume);
       localStorage.setItem('vnvc_ad_vol', adVolume.toString());
     });
@@ -1110,6 +1126,9 @@
       adVolumeSlider.value = adVolume;
       adVolPct.textContent = `${Math.round(adVolume * 100)}%`;
       if (currentMode === 'AD') adAudio.volume = adVolume;
+      if (adGainNode && audioCtx) {
+        adGainNode.gain.setValueAtTime(1.8 * adVolume, audioCtx.currentTime);
+      }
       updateAdVolumeIcon(adVolume);
       localStorage.setItem('vnvc_ad_vol', adVolume.toString());
     });
@@ -1173,6 +1192,9 @@
     }
     bgmAudio.volume = bgmVolume;
     adAudio.volume = adVolume;
+    if (adGainNode && audioCtx) {
+      adGainNode.gain.setValueAtTime(1.8 * adVolume, audioCtx.currentTime);
+    }
 
     // Register Service Worker for PWA
     if ('serviceWorker' in navigator) {
